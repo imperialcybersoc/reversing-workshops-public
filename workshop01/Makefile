@@ -17,10 +17,10 @@ artefact02: artefact02.c
 	$(CC) -O0 -o $@ $^ $(CFLAGS)
 
 artefact03: artefact03.c $(LIBOBJ)
-	$(CC) -O2 -o $@ $^ $(CFLAGS)
+	$(CC) -O0 -o $@ $^ $(CFLAGS)
 
 artefact04: artefact04.c
-	$(CC) -O0 -o $@ $^ $(CFLAGS)
+	$(CC) -O2 -o $@ $^ $(CFLAGS)
 
 artefact05: artefact05.c
 	$(CC) -O0 -o $@ $^ $(CFLAGS)
