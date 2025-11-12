@@ -1,118 +1,98 @@
+/* ICCYBERSOC: Source code for reverse engineering workshop01, follows the
+   "Umbryx" series */
+
+/* artefact05.c
+   A suspicious "relay client" supposedly communicating to relay servers,
+   which don't really exist. Features a check for an environment variable
+   printing the encoded "relay credential", the target for recovery in
+   this challenge. 
+    */
+
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
-#include "lib/aes.h"
 
 const char *COMPANY = "Umbryx Corporation";
-const char *TOOLNAME = "UmbryxMiner v4.2";
+const char *TOOLNAME = "Umbryx Relay Client v1.2";
 
-// this is just for obfuscation purposes
-unsigned char *sleep(
-    const uint8_t *data, size_t datalen
-)
-{
-    uint8_t key[16] = {
-        0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,
-        0x88,0x99,0xaa,0xbb,0xcc,0xdd,0xee,0xff
-    };
+/* Encoded "relay key" */
+static const uint8_t relay_table[] = {
+    0x80, 0xE1, 0xD1, 0xC9, 0xE0, 0xC8, 0x91, 0xD0,
+    0x50, 0xE3, 0x61, 0x19, 0x70, 0x00, 0x00, 0xF1,
+    0xD9, 0x01
+};
 
-    if (!data || datalen == 0 || (datalen % 16) != 0)
-        return NULL;
+/* misleading “host list” */
+static const char *fake_hosts[] = {
+    "node-east.umbryx.corp",
+    "node-west.umbryx.corp",
+    "node-relay.umbryx.corp"
+};
 
-    uint8_t iv[16] = {0};
+/* internal secret alphabet */
+static const char alphabet[] =
+    "Z$M0!Vx-9B@1Xr#o2f4yqL3wNs8K5j7TgQ6h+RcpHEtiCUAdJeFbvGlmnkSPauWYzOD";
 
-    unsigned char *buf = malloc(datalen + 1);
-    if (!buf) return NULL;
-    memcpy(buf, data, datalen);
+/* constant for XOR */
+static uint8_t xor_key = 0x3D;
 
-    struct AES_ctx ctx;
-    AES_init_ctx_iv(&ctx, key, iv);
-    AES_ECB_decrypt(&ctx, buf);
+/* build environment variable name at runtime */
+char envname[16];
+const char *parts[] = { "UM", "BRYX", "_", "DE", "BUG" };
 
-    uint8_t pad = datalen;
-    while (pad > 0 && buf[pad - 1] == 0x00) {
-        --pad;
+/* first pass e*/
+static void decode_stage1(uint8_t *buf, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        uint8_t b = buf[i];
+
+        /* rotate right by 3 bits */
+        b = (uint8_t) (((b >> 3) | (b << 5)) & 0xFF); 
+        
+        /* XOR each character with xor_key */
+        buf[i] = b ^ xor_key;
     }
-
-    size_t plen = pad;
-    unsigned char *plain = malloc(plen + 1);
-    if (!plain) { free(buf); return NULL; }
-
-    memcpy(plain, buf, plen);
-    plain[plen] = '\0';
-    free(buf);
-
-    return plain;
 }
 
-// UBX_MINER_KEY
-const uint8_t data_1[] = {
-    200, 189, 34, 184, 167, 74, 98, 54, 93, 102, 231, 8, 251, 223, 147, 114
-};
-
-// ./config_u8x
-const uint8_t data_2[] = {
-    217, 79, 128, 178, 209, 71, 244, 31, 248, 191, 194, 218, 94, 241, 29, 251
-};
-
-// UMBRIX\n
-const uint8_t data_3[] = {
-    248, 84, 156, 76, 242, 170, 59, 142, 181, 176, 22, 244, 110, 107, 89, 119
-};
-
-const uint8_t data_4[] = {
-    25, 74, 5, 189, 240, 240, 182, 24, 144, 24, 111, 254, 225, 245, 244, 28
-};
-
-const uint8_t data_5[] = {
-    38, 83, 196, 64, 75, 113, 203, 221, 48, 192, 191, 22, 38, 119, 22, 138
-};
+static void decode_stage2(uint8_t *buf, size_t n, char *out) {
+    for (size_t i = 0; i < n; ++i) {
+        uint8_t idx = (buf[i] + i) % (sizeof(alphabet) - 1);
+        out[i] = alphabet[idx];
+    }
+    out[n] = '\0';
+}
 
 int main(void) {
     puts("===============================================");
     printf(" %s - %s\n", COMPANY, TOOLNAME);
     puts("===============================================");
-    puts("This software is designed for OFFLINE activation of UmbryxMiner ONLY.");
-    puts("");
+    puts("Establishing relay uplink...");
+    sleep(8);
+    printf("Connected to node: %s\n", fake_hosts[rand() % 3]);
+    puts("Synchronizing configuration table...\n");
 
-    unsigned char *pt_1 = sleep(data_1, sizeof(data_1));
-    if (!getenv((char*)pt_1)) {
-        printf("Missing MINER_KEY.\n");
-        printf("Terminating.\n");
-        exit(0);
-    };
-    free(pt_1);
+    size_t n = sizeof(relay_table);
+    uint8_t *work = malloc(n);
+    if (!work) return 1;
+    memcpy(work, relay_table, n);
 
-    unsigned char *pt_2 = sleep(data_2, sizeof(data_2));
+    decode_stage1(work, n);
 
-    FILE *fptr;
-    if (!(fptr = fopen((char*)pt_2, "r"))) {
-        printf("Configuration file at ./config_ubx missing.\n");
-        printf("Terminating.\n");
-        exit(0);
+    char decoded[n + 1];
+    decode_stage2(work, n, decoded);
+
+    envname[0] = '\0';
+    for (size_t i = 0; i < sizeof(parts)/sizeof(parts[0]); ++i)
+        strncat(envname, parts[i], sizeof(envname)-strlen(envname)-1);
+
+    /* figure out env var check and recover creds */
+    if (getenv(envname)) {
+        printf("Recovered relay credential: %s\n", decoded);
+    } else {
+        puts("Relay configuration verified.");
     }
-    free(pt_2);
 
-    char config_header[8];
-    fgets(config_header, 8, fptr);
-    int res = 0;
-    unsigned char *pt_3 = sleep(data_3, sizeof(data_3));
-    res = strcmp(config_header, (char*) pt_3);
-    free(pt_3);
-
-    if (res != 0) {
-        printf("Header incorrect (expected UMBRYX)\n");
-        printf("Terminating.\n");
-        exit(0);
-    }
-    fclose(fptr); 
-    unsigned char *pt_4 = sleep(data_4, sizeof(data_4));
-
-    printf("Hello %s\n", (char*) pt_4);
-    unsigned char *pt_5 = sleep(data_5, sizeof(data_5));
-    printf("Your wallet is located at address: %s\n", (char*) pt_5);
-    free(pt_4);
-    free(pt_5);
+    free(work);
     return 0;
 }

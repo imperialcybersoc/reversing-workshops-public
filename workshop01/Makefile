@@ -21,10 +21,10 @@ artefact03: artefact03.c $(LIBOBJ)
 
 artefact04: artefact04.c
 	$(CC) -O0 -o $@ $^ $(CFLAGS)
-	upx $@
 
 artefact05: artefact05.c
 	$(CC) -O0 -o $@ $^ $(CFLAGS)
+	upx $@
 
 # Compile aes library
 $(LIBOBJ): $(LIBSRC)

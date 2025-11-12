@@ -1,45 +1,73 @@
-// upx packed challenge. other than that nothing new on the reversing side
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <string.h>
+#include "lib/aes.h"
 
 const char *COMPANY = "Umbryx Corporation";
-const char *TOOLNAME = "UmbryxMiner Activator v1.5";
+const char *TOOLNAME = "UmbryxMiner v4.2";
 
-bool check_license(const char *s) {
-    // a license should be of the form XXXX-XXXX-XXXX-XXXX
-    if (strlen(s) != 19) {
-        return false;
+// this is just for obfuscation purposes
+unsigned char *sleep(
+    const uint8_t *data, size_t datalen
+)
+{
+    uint8_t key[16] = {
+        0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,
+        0x88,0x99,0xaa,0xbb,0xcc,0xdd,0xee,0xff
+    };
+
+    if (!data || datalen == 0 || (datalen % 16) != 0)
+        return NULL;
+
+    uint8_t iv[16] = {0};
+
+    unsigned char *buf = malloc(datalen + 1);
+    if (!buf) return NULL;
+    memcpy(buf, data, datalen);
+
+    struct AES_ctx ctx;
+    AES_init_ctx_iv(&ctx, key, iv);
+    AES_ECB_decrypt(&ctx, buf);
+
+    uint8_t pad = datalen;
+    while (pad > 0 && buf[pad - 1] == 0x00) {
+        --pad;
     }
-    
-    if (s[4] != '-' || s[9] != '-' || s[14] != '-') {
-        return false;
-    }
-    
-    char seg1[5], seg2[5], seg3[5], seg4[5];
-    strncpy(seg1, s, 4); seg1[4] = '\0';
-    strncpy(seg2, s + 5, 4); seg2[4] = '\0';
-    strncpy(seg3, s + 10, 4); seg3[4] = '\0';
-    strncpy(seg4, s + 15, 4); seg4[4] = '\0';
-    
-    uint32_t sum = 0;
-    for (int i = 0; i < 4; i++) {
-        sum += (uint8_t)seg1[i];
-        sum += (uint8_t)seg2[i];
-        sum += (uint8_t)seg3[i];
-    }
-    
-    uint32_t expected = (sum ^ 0xDEAD) & 0xFFFF;
-    
-    uint32_t provided = 0;
-    if (sscanf(seg4, "%4X", &provided) != 1) {
-        return false;
-    }
-    // the last segment acts as a checksum, the sum of the characters in the
-    // first 3 segments xorred with 0xDEAD should be the last segment in hex
-    return (provided == expected);
+
+    size_t plen = pad;
+    unsigned char *plain = malloc(plen + 1);
+    if (!plain) { free(buf); return NULL; }
+
+    memcpy(plain, buf, plen);
+    plain[plen] = '\0';
+    free(buf);
+
+    return plain;
 }
+
+// UBX_MINER_KEY
+const uint8_t data_1[] = {
+    200, 189, 34, 184, 167, 74, 98, 54, 93, 102, 231, 8, 251, 223, 147, 114
+};
+
+// ./config_u8x
+const uint8_t data_2[] = {
+    217, 79, 128, 178, 209, 71, 244, 31, 248, 191, 194, 218, 94, 241, 29, 251
+};
+
+// UMBRIX\n
+const uint8_t data_3[] = {
+    248, 84, 156, 76, 242, 170, 59, 142, 181, 176, 22, 244, 110, 107, 89, 119
+};
+
+const uint8_t data_4[] = {
+    25, 74, 5, 189, 240, 240, 182, 24, 144, 24, 111, 254, 225, 245, 244, 28
+};
+
+const uint8_t data_5[] = {
+    38, 83, 196, 64, 75, 113, 203, 221, 48, 192, 191, 22, 38, 119, 22, 138
+};
 
 int main(void) {
     puts("===============================================");
@@ -47,32 +75,44 @@ int main(void) {
     puts("===============================================");
     puts("This software is designed for OFFLINE activation of UmbryxMiner ONLY.");
     puts("");
-    
-    char license[64];
-    printf("Enter your license key: ");
-    
-    if (fgets(license, sizeof(license), stdin) == NULL) {
-        puts("\n[ERROR] Failed to read license key.");
-        return 1;
+
+    unsigned char *pt_1 = sleep(data_1, sizeof(data_1));
+    if (!getenv((char*)pt_1)) {
+        printf("Missing MINER_KEY.\n");
+        printf("Terminating.\n");
+        exit(0);
+    };
+    free(pt_1);
+
+    unsigned char *pt_2 = sleep(data_2, sizeof(data_2));
+
+    FILE *fptr;
+    if (!(fptr = fopen((char*)pt_2, "r"))) {
+        printf("Configuration file at ./config_ubx missing.\n");
+        printf("Terminating.\n");
+        exit(0);
     }
-    
-    size_t len = strlen(license);
-    if (len > 0 && license[len-1] == '\n') {
-        license[len-1] = '\0';
+    free(pt_2);
+
+    char config_header[8];
+    fgets(config_header, 8, fptr);
+    int res = 0;
+    unsigned char *pt_3 = sleep(data_3, sizeof(data_3));
+    res = strcmp(config_header, (char*) pt_3);
+    free(pt_3);
+
+    if (res != 0) {
+        printf("Header incorrect (expected UMBRYX)\n");
+        printf("Terminating.\n");
+        exit(0);
     }
-    
-    puts("");
-    puts("Validating license key...");
-    
-    if (check_license(license)) {
-        puts("[SUCCESS] License key is valid!");
-        puts("UmbryxMiner has been activated.");
-        puts("Thank you for your purchase!");
-        return 0;
-    } else {
-        puts("[ERROR] Invalid license key.");
-        puts("Please check your key and try again.");
-        puts("Contact support@umbryx.corp for assistance.");
-        return 1;
-    }
+    fclose(fptr); 
+    unsigned char *pt_4 = sleep(data_4, sizeof(data_4));
+
+    printf("Hello %s\n", (char*) pt_4);
+    unsigned char *pt_5 = sleep(data_5, sizeof(data_5));
+    printf("Your wallet is located at address: %s\n", (char*) pt_5);
+    free(pt_4);
+    free(pt_5);
+    return 0;
 }

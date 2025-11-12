@@ -1,98 +1,78 @@
-/* ICCYBERSOC: Source code for reverse engineering workshop01, follows the
-   "Umbryx" series */
-
-/* artefact05.c
-   A suspicious "relay client" supposedly communicating to relay servers,
-   which don't really exist. Features a check for an environment variable
-   printing the encoded "relay credential", the target for recovery in
-   this challenge. 
-    */
-
+// upx packed challenge. other than that nothing new on the reversing side
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include <stdbool.h>
 #include <string.h>
 
 const char *COMPANY = "Umbryx Corporation";
-const char *TOOLNAME = "Umbryx Relay Client v1.2";
+const char *TOOLNAME = "UmbryxMiner Activator v1.5";
 
-/* Encoded "relay key" */
-static const uint8_t relay_table[] = {
-    0x80, 0xE1, 0xD1, 0xC9, 0xE0, 0xC8, 0x91, 0xD0,
-    0x50, 0xE3, 0x61, 0x19, 0x70, 0x00, 0x00, 0xF1,
-    0xD9, 0x01
-};
-
-/* misleading “host list” */
-static const char *fake_hosts[] = {
-    "node-east.umbryx.corp",
-    "node-west.umbryx.corp",
-    "node-relay.umbryx.corp"
-};
-
-/* internal secret alphabet */
-static const char alphabet[] =
-    "Z$M0!Vx-9B@1Xr#o2f4yqL3wNs8K5j7TgQ6h+RcpHEtiCUAdJeFbvGlmnkSPauWYzOD";
-
-/* constant for XOR */
-static uint8_t xor_key = 0x3D;
-
-/* build environment variable name at runtime */
-char envname[16];
-const char *parts[] = { "UM", "BRYX", "_", "DE", "BUG" };
-
-/* first pass e*/
-static void decode_stage1(uint8_t *buf, size_t n) {
-    for (size_t i = 0; i < n; ++i) {
-        uint8_t b = buf[i];
-
-        /* rotate right by 3 bits */
-        b = (uint8_t) (((b >> 3) | (b << 5)) & 0xFF); 
-        
-        /* XOR each character with xor_key */
-        buf[i] = b ^ xor_key;
+bool check_license(const char *s) {
+    // a license should be of the form XXXX-XXXX-XXXX-XXXX
+    if (strlen(s) != 19) {
+        return false;
     }
-}
-
-static void decode_stage2(uint8_t *buf, size_t n, char *out) {
-    for (size_t i = 0; i < n; ++i) {
-        uint8_t idx = (buf[i] + i) % (sizeof(alphabet) - 1);
-        out[i] = alphabet[idx];
+    
+    if (s[4] != '-' || s[9] != '-' || s[14] != '-') {
+        return false;
     }
-    out[n] = '\0';
+    
+    char seg1[5], seg2[5], seg3[5], seg4[5];
+    strncpy(seg1, s, 4); seg1[4] = '\0';
+    strncpy(seg2, s + 5, 4); seg2[4] = '\0';
+    strncpy(seg3, s + 10, 4); seg3[4] = '\0';
+    strncpy(seg4, s + 15, 4); seg4[4] = '\0';
+    
+    uint32_t sum = 0;
+    for (int i = 0; i < 4; i++) {
+        sum += (uint8_t)seg1[i];
+        sum += (uint8_t)seg2[i];
+        sum += (uint8_t)seg3[i];
+    }
+    
+    uint32_t expected = (sum ^ 0xDEAD) & 0xFFFF;
+    
+    uint32_t provided = 0;
+    if (sscanf(seg4, "%4X", &provided) != 1) {
+        return false;
+    }
+    // the last segment acts as a checksum, the sum of the characters in the
+    // first 3 segments xorred with 0xDEAD should be the last segment in hex
+    return (provided == expected);
 }
 
 int main(void) {
     puts("===============================================");
     printf(" %s - %s\n", COMPANY, TOOLNAME);
     puts("===============================================");
-    puts("Establishing relay uplink...");
-    sleep(8);
-    printf("Connected to node: %s\n", fake_hosts[rand() % 3]);
-    puts("Synchronizing configuration table...\n");
-
-    size_t n = sizeof(relay_table);
-    uint8_t *work = malloc(n);
-    if (!work) return 1;
-    memcpy(work, relay_table, n);
-
-    decode_stage1(work, n);
-
-    char decoded[n + 1];
-    decode_stage2(work, n, decoded);
-
-    envname[0] = '\0';
-    for (size_t i = 0; i < sizeof(parts)/sizeof(parts[0]); ++i)
-        strncat(envname, parts[i], sizeof(envname)-strlen(envname)-1);
-
-    /* figure out env var check and recover creds */
-    if (getenv(envname)) {
-        printf("Recovered relay credential: %s\n", decoded);
-    } else {
-        puts("Relay configuration verified.");
+    puts("This software is designed for OFFLINE activation of UmbryxMiner ONLY.");
+    puts("");
+    
+    char license[64];
+    printf("Enter your license key: ");
+    
+    if (fgets(license, sizeof(license), stdin) == NULL) {
+        puts("\n[ERROR] Failed to read license key.");
+        return 1;
     }
-
-    free(work);
-    return 0;
+    
+    size_t len = strlen(license);
+    if (len > 0 && license[len-1] == '\n') {
+        license[len-1] = '\0';
+    }
+    
+    puts("");
+    puts("Validating license key...");
+    
+    if (check_license(license)) {
+        puts("[SUCCESS] License key is valid!");
+        puts("UmbryxMiner has been activated.");
+        puts("Thank you for your purchase!");
+        return 0;
+    } else {
+        puts("[ERROR] Invalid license key.");
+        puts("Please check your key and try again.");
+        puts("Contact support@umbryx.corp for assistance.");
+        return 1;
+    }
 }
