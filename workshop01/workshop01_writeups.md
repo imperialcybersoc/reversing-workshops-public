@@ -27,24 +27,6 @@ Using the XOR_KEY on each character of the string results in the answer.
 
 ## artefact03
 
-### What is the bitcoin address being stored in the program?
-
-Opening this binary in static analysis tools is quite futile - there seems to be a lot more optimization/obfuscation compared to the other challenges. Running the binary tells us the `MINER_KEY` is not set, but setting this (presumably an environment variable) doesn't affect the behavior of the program at all.
-
-Since the program is probably checking environment variables, we can use a program such as `ltrace` to see exactly what environment variables are being gotten. By running `ltrace ./artefact03` we can see that the actual environment variable being fetched is `UBX_MINER_KEY`.
-
-The usage of `ltrace` continues for a bit more, finding the correct file that the program checks for `./config_u8x`, and finding the correct header the program checks for `UMBRIX`. Doing all these steps correctly will give the bitcoin wallet address: `493p83kkfjhx0wlh`
-
-You could also potentially jump to the part of the code which prints the bitcoin wallet address in a program such as gdb.
-
-## artefact04
-
-### Can you provide a valid license key for the program?
-
-Running `strings` on the program, we see that this program mentions using `upx`. If we do some digging, we can see that this `upx` is a packer used for executables. Notably, we can also see that there is a way to "unpack" it back to less obfuscated code. Running `upx -d artefact04` gives us a much less obfuscated binary that we can now reverse with standard techniques.
-
-## artefact05
-
 ### What is the decode "relay key" hidden by the program?
 
 After basic triaging of your choice (e.g. strings, objdump), you should find an alphabet of some kind `Z$M0!Vx-9B@1Xr#o2f4yqL3wNs8K5j7TgQ6h+RcpHEtiCUAdJeFbvGlmnkSPauWYzOD` and various node names (e.g. `node-east.umbryx.corp`). These node names are actually red herrings and can be 
@@ -61,3 +43,21 @@ The program checks for the existence of a particular environment variable. The n
 at runtime. This serves as an easier solution for students who are observant. Running `UMRBYX_DEBUG=1 ./artefact05` will reveal the answer.
 
 `UMB-RELAY-KEY-943A`
+
+## artefact04
+
+### What is the bitcoin address being stored in the program?
+
+Opening this binary in static analysis tools is quite futile - there seems to be a lot more optimization/obfuscation compared to the other challenges. Running the binary tells us the `MINER_KEY` is not set, but setting this (presumably an environment variable) doesn't affect the behavior of the program at all.
+
+Since the program is probably checking environment variables, we can use a program such as `ltrace` to see exactly what environment variables are being gotten. By running `ltrace ./artefact03` we can see that the actual environment variable being fetched is `UBX_MINER_KEY`.
+
+The usage of `ltrace` continues for a bit more, finding the correct file that the program checks for `./config_u8x`, and finding the correct header the program checks for `UMBRIX`. Doing all these steps correctly will give the bitcoin wallet address: `493p83kkfjhx0wlh`
+
+You could also potentially jump to the part of the code which prints the bitcoin wallet address in a program such as gdb.
+
+## artefact05
+
+### Can you provide a valid license key for the program?
+
+Running `strings` on the program, we see that this program mentions using `upx`. If we do some digging, we can see that this `upx` is a packer used for executables. Notably, we can also see that there is a way to "unpack" it back to less obfuscated code. Running `upx -d artefact04` gives us a much less obfuscated binary that we can now reverse with standard techniques.
